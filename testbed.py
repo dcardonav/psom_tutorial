@@ -7,6 +7,8 @@ __status__ = "Development"
 
 import numpy as np
 import os
+
+import openpyxl
 import pyomo.environ as pyo
 import pandas as pd
 import yaml
@@ -172,31 +174,70 @@ def data_load(sPath:str):
     return input_data
 
 
-def basis_execution(folder:str, file='config.yaml', solver='gurobi'):
+def basis_execution(reference='data/complete_single_node.xlsx', folder='.', file='config.xlsx', solver='gurobi'):
     """
     This function runs an optimization model considering the parametrized 'basis' in the yaml file. Each 'basis'must
     have an associated Excel file with the power system configuration to be used.
+    :param reference:
     :param folder:
+    :param file:
+    :param solver:
     :return:
     """
 
-    f = open(os.path.join(folder, file), 'r')
-    d = yaml.safe_load(f)
-    f.close()
+    df_config = pd.read_excel(os.path.join(folder, file))
+    wb_model = openpyxl.load_workbook(filename=reference)
+
+    if 'cap_factors' in wb_model.sheetnames:
+        wb_model.remove(wb_model['cap_factors'])
+    wb_model.create_sheet('cap_factors')
+    ws_cf = wb_model['cap_factors']
+    ws_cf.cell(row=1, column=1).value = 'period'
+    ws_cf.cell(row=1, column=2).value = 'generator'
+    ws_cf.cell(row=1, column=3).value = 'cap_factor'
+    ws_cf.cell(row=2, column=1).value = 1
+    ws_cf.cell(row=2, column=2).value = 'w1'
+
+
+    if 'demand' in wb_model.sheetnames:
+        wb_model.remove(wb_model['demand'])
+    wb_model.create_sheet('demand')
+    ws_dem = wb_model['demand']
+    ws_dem.cell(row=1, column=1).value = 'period'
+    ws_dem.cell(row=1, column=2).value = 'demand'
+    ws_dem.cell(row=2, column=1).value = 1
+
+    ws_config = wb_model['config']
+    ws_config.cell(row=1, column=2).value = 1
+
+    if not os.path.exists(folder):
+        os.mkdir(folder)
 
     models = dict()
-    for k, i in d['basis'].items():
-        sPath = os.path.join(folder, k+'.xlsx')
+    for idx, r in df_config.iterrows():
+        cent_dem = r['centroid_demand']
+        cent_cf = r['centroid_cf']
+        name = r['basis']
+        weight = r['weight']
+
+        ws_cf.cell(row=2, column=3).value = cent_cf
+        ws_dem.cell(row=2, column=2).value = cent_dem
+
+        # this code is redundant but is to make use of already existing code
+        # to load the data for the model run from an Excel file
+        sPath = os.path.join(folder, name+'.xlsx')
+        wb_model.save(sPath)
         data = data_load(sPath)
         model = create_complete_model(data)
-        solver = pyo.SolverFactory(solver, solver_io="lp")
-        res = solver.solve(model)
+        solved = pyo.SolverFactory(solver, solver_io="lp")
+        res = solved.solve(model)
         aux_res = dict()
 
-        aux_res['z'] = pyo.value(model.z) * int(i)
+        aux_res['z'] = pyo.value(model.z) * int(weight)
         aux_res['model'] = model
+        aux_res['weight'] = int(weight)
 
-        models[k] = aux_res
+        models[name] = aux_res
 
     return models
 
@@ -212,8 +253,8 @@ def run_complete_case(case='complete_1.xlsx', folder='data', solver='gurobi'):
     sPath = os.path.join(folder, case)
     data = data_load(sPath)
     model = create_complete_model(data)
-    solver = pyo.SolverFactory(solver, solver_io="lp")
-    res = solver.solve(model)
+    solved = pyo.SolverFactory(solver, solver_io="lp")
+    res = solved.solve(model)
 
     return model
 
@@ -249,8 +290,15 @@ def export_complete_solution(mdl: pyo.ConcreteModel, folder: str):
 
     sln = []
 
+    sln_dict = dict()
+
     if not os.path.exists(folder):
         os.mkdir(folder)
+
+    sln_dict['of_value'] = pyo.value(mdl.z)
+    sln_dict['thermal'] = 0
+    sln_dict['renewable'] = 0
+    sln_dict['nsp'] = 0
 
     # this code is only for illustrative purposes as it is not
     # the most efficient way to obtain data from Pyomo
@@ -259,6 +307,16 @@ def export_complete_solution(mdl: pyo.ConcreteModel, folder: str):
         aux_d = {}
         for idx in v:
             aux_d[idx] = pyo.value(v[idx])
+            if str(v) == 'vGen':
+                g, p = idx
+                if g == 'w1':
+                    sln_dict['renewable'] = sln_dict['renewable'] + aux_d[idx]
+                else:
+                    sln_dict['thermal'] = sln_dict['thermal'] + aux_d[idx]
+            elif str(v) == 'vNSP':
+                sln_dict['nsp'] = sln_dict['nsp'] + aux_d[idx]
+            else:
+                raise Exception("Unknown variable in model!")
 
         aux_var['values'] = aux_d
 
@@ -273,6 +331,11 @@ def export_complete_solution(mdl: pyo.ConcreteModel, folder: str):
         df.reset_index(drop=False, inplace=True)
         df.to_excel(os.path.join(folder, str(elem['var'])+'.xlsx'), index=False)
 
+    df_complete = pd.DataFrame.from_dict(sln_dict, orient='index').rename(columns={0: 'complete'})
+
+
+    return df_complete
+
 
 def export_aggregated_solution(mdls: dict, folder: str):
 
@@ -282,10 +345,48 @@ def export_aggregated_solution(mdls: dict, folder: str):
     if not os.path.exists(folder):
         os.mkdir(folder)
 
+    l_names = []
+    l_of = []
+    l_thermal = []
+    l_renewable = []
+    l_nsp = []
+    l_weight = []
     for k, v in mdls.items():
         mdl = v['model']
-        export_complete_solution(mdl, os.path.join(folder, k))
+        l_names.append(k)
+        l_of.append(v['z'])
+        l_renewable.append(pyo.value(mdl.vGen[('w1', 1)])*v['weight'])
+        l_thermal.append(pyo.value(mdl.vGen[('t1', 1)])*v['weight'])
+        l_nsp.append(pyo.value(mdl.vNSP[1])*v['weight'])
+        l_weight.append(v['weight'])
 
+    df_results = pd.DataFrame({'basis': l_names,
+                               'of_value': l_of,
+                               'thermal': l_thermal,
+                               'renewable': l_renewable,
+                               'nsp': l_nsp,
+                               'weight': l_weight})
+    df_results.to_excel(os.path.join(folder, 'results.xlsx'), index=False)
+
+    return df_results
+
+
+def export_model_comparison(df_complete: pd.DataFrame, df_aggregated: pd.DataFrame) -> pd.DataFrame:
+    """
+    Receives a complete model and an aggregated one that intends to approximate it.
+    :param aggregated: list of models returned by export_aggregated_solution
+    :param complete: complete model returned by run_complete_case
+    :return: dataframe with results comparison
+    """
+
+    agg_sum = df_aggregated.loc[:, ['of_value', 'thermal', 'renewable', 'nsp']].sum()
+    df_complete = df_complete.copy()
+    df_complete.insert(1, 'aggregated', agg_sum)
+    df_complete.reset_index(drop=False, inplace=True)
+    df_complete.rename(columns={'index': 'result'}, inplace=True)
+    df_complete['delta'] = df_complete['complete'] - df_complete['aggregated']
+
+    return df_complete
 
 
 def extract_duals(model, folder: str):
@@ -321,10 +422,14 @@ def extract_duals(model, folder: str):
 
     df_duals.to_excel(os.path.join(folder, folder+"_duals.xlsx"), index=False)
 
+    return df_duals
+
 
 
 if __name__ == '__main__':
     results_complete = run_complete_case(folder='data', case='complete_single_node.xlsx')
-    export_complete_solution(results_complete, '.')
-
+    df_complete = export_complete_solution(results_complete, '.')
     extract_duals(results_complete, 'complete_single_node')
+    models = basis_execution(folder='data/aggregated_single')
+    df_agg = export_aggregated_solution(models, 'aggregated_single')
+    df_comparison = export_model_comparison(df_complete, df_agg)
