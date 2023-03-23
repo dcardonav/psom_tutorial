@@ -332,7 +332,7 @@ def export_complete_solution(mdl: pyo.ConcreteModel, folder: str):
         df.to_excel(os.path.join(folder, str(elem['var'])+'.xlsx'), index=False)
 
     df_complete = pd.DataFrame.from_dict(sln_dict, orient='index').rename(columns={0: 'complete'})
-
+    df_complete.to_excel(os.path.join(folder, 'results.xlsx'))
 
     return df_complete
 
@@ -379,12 +379,19 @@ def export_model_comparison(df_complete: pd.DataFrame, df_aggregated: pd.DataFra
     :return: dataframe with results comparison
     """
 
+    decision_vars = ['decision_vars', 8736*3, df_aggregated.shape[0]*3]
+
     agg_sum = df_aggregated.loc[:, ['of_value', 'thermal', 'renewable', 'nsp']].sum()
     df_complete = df_complete.copy()
     df_complete.insert(1, 'aggregated', agg_sum)
     df_complete.reset_index(drop=False, inplace=True)
     df_complete.rename(columns={'index': 'result'}, inplace=True)
+
+    df_complete.loc[len(df_complete)] = decision_vars
+
     df_complete['delta'] = df_complete['complete'] - df_complete['aggregated']
+    df_complete['rel_delta'] = 1 - df_complete['aggregated']/df_complete['complete']
+
 
     return df_complete
 
