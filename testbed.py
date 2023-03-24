@@ -5,6 +5,7 @@ __license__ = "MIT"
 __maintainer__ = "David Cardona-Vasquez"
 __status__ = "Development"
 
+import glob
 import numpy as np
 import os
 
@@ -430,6 +431,35 @@ def extract_duals(model, folder: str):
     df_duals.to_excel(os.path.join(folder, folder+"_duals.xlsx"), index=False)
 
     return df_duals
+
+
+
+def generate_config(df_centroids: pd.DataFrame, folder: str):
+    """
+    Code to export the centroids in df_centroids to the config_auto.xlsx, you can do it by hand to tweak it to your own clustering
+    :param df_centroids:
+    :param folder:
+    :return:
+    """
+
+
+    prev_files = glob.glob(os.path.join('data',folder,'bs_auto*.xlsx'))
+    for f in prev_files:
+        os.remove(f)
+
+    # copying the dataframe
+    df_config_auto = df_centroids.copy()
+    df_config_auto['basis'] = ['bs_auto' + str(i) for i in range(1, df_config_auto.shape[0] + 1)]
+
+    # renaming the columns
+    df_config_auto.rename(columns={'cap_factor': 'centroid_cf', 'demand': 'centroid_demand'}, inplace=True)
+    # changing the order of the centroids
+    df_config_auto = df_config_auto.iloc[:, [3, 1, 0, 2]]
+    # exporting the file
+    df_config_auto.to_excel(os.path.join('data',folder, 'config_auto.xlsx'), index=False)
+
+    return df_config_auto
+
 
 
 
