@@ -287,12 +287,12 @@ def get_centroids(b_idx:dict, data:pd.DataFrame, cols=[0, 1], col_names=['demand
 
 
 
-def export_complete_solution(mdl: pyo.ConcreteModel, folder: str):
+def export_complete_solution(mdl: pyo.ConcreteModel, folder: str, hourly=True):
 
     sln = []
 
     sln_dict = dict()
-
+    l_sln_hourly = []
     if not os.path.exists(folder):
         os.mkdir(folder)
 
@@ -331,11 +331,23 @@ def export_complete_solution(mdl: pyo.ConcreteModel, folder: str):
 
         df.reset_index(drop=False, inplace=True)
         df.to_excel(os.path.join(folder, str(elem['var'])+'.xlsx'), index=False)
+        if 'level_1' in df.columns:
+            df = df.pivot(index='level_1', columns='level_0', values='vGen').reset_index()
+            df.rename(columns={'level_1': 'period'}, inplace=True)
+        else:
+            df.rename(columns={'index': 'period'}, inplace=True)
+        l_sln_hourly.append(df)
+
+    df_hourly = None
+    if len(l_sln_hourly) > 0:
+        df_hourly = l_sln_hourly[0]
+        for i in range(1, len(l_sln_hourly)):
+            df_hourly = df_hourly.merge(right=l_sln_hourly[i], on='period')
 
     df_complete = pd.DataFrame.from_dict(sln_dict, orient='index').rename(columns={0: 'complete'})
     df_complete.to_excel(os.path.join(folder, 'results.xlsx'))
 
-    return df_complete
+    return df_complete, df_hourly
 
 
 def export_aggregated_solution(mdls: dict, folder: str):
@@ -465,8 +477,8 @@ def generate_config(df_centroids: pd.DataFrame, folder: str):
 
 if __name__ == '__main__':
     results_complete = run_complete_case(folder='data', case='complete_single_node.xlsx')
-    df_complete = export_complete_solution(results_complete, '.')
-    extract_duals(results_complete, 'complete_single_node')
-    models = basis_execution(folder='data/aggregated_single')
-    df_agg = export_aggregated_solution(models, 'aggregated_single')
-    df_comparison = export_model_comparison(df_complete, df_agg)
+    df_complete, df_hourly = export_complete_solution(results_complete, '.')
+    # extract_duals(results_complete, 'complete_single_node')
+    # models = basis_execution(folder='data/aggregated_single')
+    # df_agg = export_aggregated_solution(models, 'aggregated_single')
+    # df_comparison = export_model_comparison(df_complete, df_agg)
