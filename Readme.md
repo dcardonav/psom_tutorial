@@ -1,4 +1,4 @@
-# Tutorial on Aggregated Power System Optimization Models
+# Aggregated Power System Optimization Models
 
 
 ## System Requirements:
@@ -17,11 +17,21 @@ These instructions are meant to be hassle-free and do not constitute the best pr
 4. Add the w64 folder from the glpk installation to the *Path* system variable, as indicated in the picture
 
 ### Installing Python
-1. 
+1. Download and install the Anaconda distribution (https://www.anaconda.com/)
+2. Open an Anaconda command line: Start -> Anaconda Command
+3. Navigate to the folder where environment.xml file is located
+4. Create the environment: conda create --name winter_school --file environment.xml
+5. Open Jupyter: Start -> Jupyter (winter_school)
 
 ### Installing the Environment 
-1. Go to 
+For those who are familiar with Python and do not want to make a complete installation, an environment.xml file is provided which contains the required packages.
 
+### Checking the Installation
+1. Open jupyter and select the 00_Python_Basics.ipynb
+2. Press Ctrl+Enter to run each cell, if the code runs without any errors then you're ready for the tutorial session.
+
+
+This is a work-in-progress, so feedback is greatly appreciated. Have fun!
 
 
 **Author**: David Cardona-Vasquez \
