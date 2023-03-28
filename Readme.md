@@ -8,9 +8,9 @@
 
 ## Installation Instructions
 
-These instructions are meant to be hassle-free and do not constitute the best practices; those who know Python can look at the environment.xml file and manually install the requirements. However, if you don't have a solver installed on your machine, please follow the instructions to install and configure GLPK.
+These instructions are meant to be hassle-free and do not constitute the best practices; those who know Python can look at the environment.yml file or the end of this Readme and manually install the requirements. If you don't have a solver installed on your machine, please follow the instructions to install and configure GLPK.
 
-### Installing a Solver on Windows
+### Installing GLPK on Windows
 1. Go to https://sourceforge.net/projects/winglpk/
 2. Download the latest version of the GLPK binaries
 3. Extract the contents to the folder of your choice
@@ -18,16 +18,16 @@ These instructions are meant to be hassle-free and do not constitute the best pr
 ![alt text](img/env_var.png "env vars")
 
 ### Installing Python
-1. Download and install the Anaconda distribution (https://www.anaconda.com/)
-2. Open an Anaconda command line: Start -> Anaconda Command
-3. Navigate to the folder where environment.xml file is located
-4. Create the environment: conda create --name winter_school --file environment.xml
+1. Download the repository as a zip file, and extract its contents to a folder of your choice
+2. Download and install the Anaconda distribution (https://www.anaconda.com/)
+2. Open an Anaconda command line: Start -> All apps -> Anaconda3 -> Anaconda Powershell
+3. Navigate to the folder where environment.yml file is located (using cd)
+4. Create the environment: conda env create --name winter_school --file environment.yml
 
 ### Running the Tutorial
-1. Download the repository as a zip file, and extract its contents to a folder of your choice
-2. Open Jupyter: Start -> All apps -> Anaconda3 -> Jupyter (winter_school)
-3. Navigate to the location where you extracted the repository
-4. Select any of ipynb file to open them 
+1. Open Jupyter: Start -> All apps -> Anaconda3 -> Jupyter (winter_school)
+2. Navigate to the location where you extracted the repository
+3. Select any of ipynb file to open them 
 
 ### Checking the Installation
 1. Open jupyter and select the 00_Python_Basics.ipynb
