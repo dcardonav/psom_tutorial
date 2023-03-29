@@ -8,9 +8,9 @@
 
 ## Installation Instructions
 
-These instructions are meant to be hassle-free and do not constitute the best practices; those who know Python can look at the environment.yml file or the end of this Readme and manually install the requirements. If you don't have a solver installed on your machine, please follow the instructions to install and configure GLPK.
+These instructions are meant to be hassle-free and do not constitute the best practices; those who know Python can look at the environment.yml file and manually install the requirements. However, if you don't have a solver installed on your machine, please follow the instructions to install and configure GLPK.
 
-### Installing GLPK on Windows
+### Installing a Solver on Windows
 1. Go to https://sourceforge.net/projects/winglpk/
 2. Download the latest version of the GLPK binaries
 3. Extract the contents to the folder of your choice
@@ -19,15 +19,13 @@ These instructions are meant to be hassle-free and do not constitute the best pr
 
 ### Installing Python
 1. Download and install the Anaconda distribution (https://www.anaconda.com/)
-2. Open an Anaconda command line: Start -> All apps -> Anaconda3 -> Anaconda Powershell
-
+2. Open an Anaconda command line: Start -> Anaconda Command
 
 ### Running the Tutorial
 1. Download the repository as a zip file, and extract its contents to a folder of your choice
-2. From the Anaconda command line, navigate to the folder where environment.yml file is located (using cd)
-3. Type the following command to create the environment: **conda env create --name winter_school --file environment.yml**
-4. After the command is correctly executed, Anaconda Command can be closed
-
+2. Navigate to the folder where environment.yml file is located
+3. In Anaconda Command, create the environment: conda env create --name winter_school --file environment.yml
+4. After the command is correctly executed Anaconda Command can be closed
 
 ### Checking the Installation
 1. Open Jupyter: Start -> All apps -> Anaconda3 -> Jupyter (winter_school)
@@ -36,7 +34,7 @@ These instructions are meant to be hassle-free and do not constitute the best pr
 4. Press Shift+Enter to run each cell; if the code runs without errors, you're ready for the tutorial session.
 
 ### For those familiar with Python: 
-For those who know their way around with Python and do not want to make a complete installation, the required libraries are:
+For those who know their way around with Python and do not want to make a complete installation of the required libraries which are (however, note that these will also install their own dependencies):
 - numpy
 - pandas
 - openpyxl
@@ -49,6 +47,5 @@ For those who know their way around with Python and do not want to make a comple
 This is a work in progress, so feedback is greatly appreciated. Have fun!
 
 **Author**: David Cardona-Vasquez \
-**Copyright**: Copyright 2023, Graz University of Technology \
-**License**: MIT \
+**Copyright**: Copyright 2022, Graz University of Technology \
 **Status**: Development 
