@@ -14,7 +14,6 @@ import pyomo.environ as pyo
 import pandas as pd
 import yaml
 
-
 def create_complete_model(input_data:dict):
     """
     This function creates the complete optimization model using the provided input data. Returns a Pyomo concrete model
@@ -84,7 +83,78 @@ def create_complete_model(input_data:dict):
 
     return model
 
+def create_complete_model_network(input_data:dict, pRamping=False):
 
+    pLinLim_l = input_data['line_limit']
+
+    model = create_complete_model(input_data)
+    model.l = pyo.RangeSet(len(pLinLim_l))
+
+    model.vLF = pyo.Var(model.l, model.l, model.p, domain=pyo.NonNegativeReals)
+    model.pLinLim_l = pyo.Param(model.l, initialize=pLinLim_l)
+
+    model.del_component(model.eBalance)
+    def eBalance_bus_1(mdl, i):
+        return mdl.pDemand_p[i] == - mdl.vLF[1, 3, i] - mdl.vLF[1, 2, i] + \
+                mdl.vLF[3, 1, i] + mdl.vLF[2, 1, i] \
+                + mdl.vNSP[i]
+    model.eBalance_bus_1 = pyo.Constraint(model.p, rule=eBalance_bus_1)
+
+    def eBalance_bus_2(mdl, i):
+        return 0 == - mdl.vLF[2, 3, i] + mdl.vLF[1, 2, i] + \
+               mdl.vLF[3, 2, i] - mdl.vLF[2, 1, i] + \
+               mdl.vGen['t1', i]
+    model.eBalance_bus_2 = pyo.Constraint(model.p, rule=eBalance_bus_2)
+
+    def eBalance_bus_3(mdl, i):
+        return 0 == mdl.vLF[2, 3, i] + mdl.vLF[1, 3, i] - \
+               mdl.vLF[3, 1, i] - mdl.vLF[3, 2, i] + \
+               mdl.vGen['w1', i]
+    model.eBalance_bus_3 = pyo.Constraint(model.p, rule=eBalance_bus_3)
+
+
+    # Constraints to represent the maximum flow
+    def eMaxLim_1_exp_rule(mdl, i):
+        return mdl.pLinLim_l[1] >= mdl.vLF[1, 2, i]
+    model.eMaxLim_1_exp = pyo.Constraint(model.p, rule=eMaxLim_1_exp_rule)
+
+    def eMaxLim_1_imp_rule(mdl, i):
+        return mdl.pLinLim_l[1] >= mdl.vLF[2, 1, i]
+    model.eMaxLim_1_imp = pyo.Constraint(model.p, rule=eMaxLim_1_imp_rule)
+
+    def eMaxLim_2_exp_rule(mdl, i):
+        return mdl.pLinLim_l[2] >= mdl.vLF[2, 3, i]
+    model.eMaxLim_2_exp = pyo.Constraint(model.p, rule=eMaxLim_2_exp_rule)
+
+    def eMaxLim_2_imp_rule(mdl, i):
+        return mdl.pLinLim_l[2] >= mdl.vLF[3, 2, i]
+    model.eMaxLim_2_imp = pyo.Constraint(model.p, rule=eMaxLim_2_imp_rule)
+
+    def eMaxLim_3_exp_rule(mdl, i):
+        return mdl.pLinLim_l[3] >= mdl.vLF[3, 1, i]
+    model.eMaxLim_3_exp = pyo.Constraint(model.p, rule=eMaxLim_3_exp_rule)
+
+    def eMaxLim_3_imp_rule(mdl, i):
+        return mdl.pLinLim_l[3] >= mdl.vLF[1, 3, i]
+    model.eMaxLim_3_imp = pyo.Constraint(model.p, rule=eMaxLim_3_imp_rule)
+
+    def eCostNet_rule(mdl, i):
+        return sum(mdl.vGen[g, i]*mdl.pVC_g[g] for g in mdl.g) + mdl.vNSP[i]*mdl.pVC_nsp + \
+               (sum(mdl.vLF[j, k, i]*0.1 for j in range(1, 4) for k in range(1, 4)))
+    model.del_component(model.vCost)
+    model.vCost = pyo.Expression(model.p, rule=eCostNet_rule)
+
+    def eObjective_rule(mdl):
+        return sum(mdl.vCost[i] for i in model.p)
+    model.del_component(model.z)
+    model.z = pyo.Objective(rule=eObjective_rule, sense=pyo.minimize)
+
+    model.del_component(model.rc)
+    model.rc = pyo.Suffix(direction=pyo.Suffix.IMPORT)
+    model.del_component(model.dual)
+    model.dual = pyo.Suffix(direction=pyo.Suffix.IMPORT)
+
+    return model
 
 def basis_summarization(sPath:str, basis:list) -> pd.DataFrame:
     """
@@ -98,8 +168,8 @@ def basis_summarization(sPath:str, basis:list) -> pd.DataFrame:
     dfs = []
     for k in basis:
         auxPath = os.path.join(sPath, str(k)+".xlsx")
-        wsDemand = pd.read_excel(auxPath, "demand", index_col=0)
-        wsCapFactors = pd.read_excel(auxPath, "cap_factors", index_col=0)
+        wsDemand = pd.read_excel(auxPath, 5, index_col=0)
+        wsCapFactors = pd.read_excel(auxPath, 6, index_col=0)
 
         df_aux = pd.merge(left=wsDemand, right=wsCapFactors, how='inner', left_index=True, right_index=True)
         df_aux.drop(columns=['generator'], inplace=True)
@@ -121,15 +191,18 @@ def data_load(sPath:str):
     :return:
     """
 
-    wsConfig = pd.read_excel(sPath,"config", header=None, index_col=0)
-    wsThermal = pd.read_excel(sPath, "thermal", index_col=0)
-    wsVRES = pd.read_excel(sPath, "vres", index_col=0)
-    wsDemand = pd.read_excel(sPath, "demand", index_col=0)
-    wsCapFactors = pd.read_excel(sPath, "cap_factors", index_col=0)
+    wsConfig = pd.read_excel(sPath, 'config', header=None, index_col=0)
+    wsThermal = pd.read_excel(sPath, 'thermal', index_col=0)
+    wsVRES = pd.read_excel(sPath, 'vres', index_col=0)
+    wsDemand = pd.read_excel(sPath, 'demand', index_col=0)
+    wsCapFactors = pd.read_excel(sPath, 'cap_factors', index_col=0)
 
     input_data = dict()
     input_data['periods'] = wsConfig.loc['periods'].values[0]
     input_data['vc_nsp'] = wsConfig.loc['vc_nsp'].values[0]
+
+    # Temporary to fix the spillage cost
+    input_data['spil_price'] = 0.1
 
     # get the data from the thermal generators
     the_gen = list(wsThermal.index)
@@ -174,8 +247,25 @@ def data_load(sPath:str):
 
     return input_data
 
+def data_load_network(sPath:str):
+    """
+    Loads only the required info for the three buses cases and calls the function
+    to load the other information
+    :param sPath:
+    :return:
+    """
 
-def basis_execution(reference='data/complete_single_node.xlsx', folder='.', file='config.xlsx', solver='gurobi'):
+    input_data = data_load(sPath)
+    wsLineLimits = pd.read_excel(sPath, 'line_limits', index_col=0)
+
+    input_data['line_limit'] = dict()
+    for idx, r in wsLineLimits.iterrows():
+        input_data['line_limit'][idx] = r['limit']
+
+
+    return input_data
+
+def basis_execution(reference='data/complete_network.xlsx', folder='.', file='config.xlsx', solver='gurobi', pRamping=False):
     """
     This function runs an optimization model considering the parametrized 'basis' in the yaml file. Each 'basis'must
     have an associated Excel file with the power system configuration to be used.
@@ -228,8 +318,8 @@ def basis_execution(reference='data/complete_single_node.xlsx', folder='.', file
         # to load the data for the model run from an Excel file
         sPath = os.path.join(folder, name+'.xlsx')
         wb_model.save(sPath)
-        data = data_load(sPath)
-        model = create_complete_model(data)
+        data = data_load_network(sPath)
+        model = create_complete_model_network(data)
         solved = pyo.SolverFactory(solver, solver_io="lp")
         res = solved.solve(model)
         aux_res = dict()
@@ -243,7 +333,7 @@ def basis_execution(reference='data/complete_single_node.xlsx', folder='.', file
     return models
 
 
-def run_complete_case(case='complete_1.xlsx', folder='data', solver='gurobi'):
+def run_complete_case(case='complete_1.xlsx', folder='data', solver='gurobi', pRamping=False):
     """
     This is used to run a complete model (without any aggregation) using the parametrization provided in the Excel file.
     The main differente with the 'basis' run is that it corresponds to only one complete run and thus it does not
@@ -252,12 +342,28 @@ def run_complete_case(case='complete_1.xlsx', folder='data', solver='gurobi'):
     """
 
     sPath = os.path.join(folder, case)
-    data = data_load(sPath)
-    model = create_complete_model(data)
-    solved = pyo.SolverFactory(solver, solver_io="lp")
-    res = solved.solve(model)
+    data = data_load_network(sPath)
+    model = create_complete_model_network(data, pRamping)
+    solver = pyo.SolverFactory(solver, solver_io="lp")
+    res = solver.solve(model)
 
     return model
+
+def get_rcs(n:str, rc:pd.DataFrame):
+    values = []
+    resources = []
+    periods = []
+    idx = rc.name == n
+    for ix, r in rc.loc[idx].iterrows():
+        periods.append(int(r['index'][1]))
+        resources.append(str(n) + '_' + str(r['index'][0]))
+        values.append(r['values'])
+
+    aux_df = pd.DataFrame(list(zip(periods, resources, values)),
+                          columns=['period', 'constraint', 'rc'])
+    aux_df = aux_df.pivot(index='period', columns='constraint', values='rc').reset_index()
+
+    return aux_df
 
 
 def idx_match(row:pd.Series, df:pd.DataFrame):
@@ -267,6 +373,8 @@ def idx_match(row:pd.Series, df:pd.DataFrame):
             idxs.append(idx)
 
     return idxs
+
+
 
 def get_centroids(b_idx:dict, data:pd.DataFrame, cols=[0, 1], col_names=['demand', 'cap_factor']):
 
@@ -285,7 +393,12 @@ def get_centroids(b_idx:dict, data:pd.DataFrame, cols=[0, 1], col_names=['demand
 
     return df_cent
 
-
+def add_basis(b_idx:dict, data:pd.DataFrame):
+    i=1
+    data['basis'] = 'none'
+    for b in b_idx.values():
+        data.iloc[b, 2] = 'bs' + str(i)
+        i = i + 1
 
 def export_complete_solution(mdl: pyo.ConcreteModel, folder: str, hourly=True):
 
@@ -316,6 +429,9 @@ def export_complete_solution(mdl: pyo.ConcreteModel, folder: str, hourly=True):
                     sln_dict['thermal'] = sln_dict['thermal'] + aux_d[idx]
             elif str(v) == 'vNSP':
                 sln_dict['nsp'] = sln_dict['nsp'] + aux_d[idx]
+            elif str(v) == 'vLF':
+                l1, l2, p = idx
+                sln_dict[str(l1)+'_to_'+str(l2)] = sln_dict.get(str(l1)+'_to_'+str(l2), 0) + aux_d[idx]
             else:
                 raise Exception("Unknown variable in model!")
 
@@ -331,9 +447,11 @@ def export_complete_solution(mdl: pyo.ConcreteModel, folder: str, hourly=True):
 
         df.reset_index(drop=False, inplace=True)
         df.to_excel(os.path.join(folder, str(elem['var'])+'.xlsx'), index=False)
-        if 'level_1' in df.columns:
+        if 'vGen' in df.columns:
             df = df.pivot(index='level_1', columns='level_0', values='vGen').reset_index()
             df.rename(columns={'level_1': 'period'}, inplace=True)
+        elif 'vLF' in df.columns:
+            continue
         else:
             df.rename(columns={'index': 'period'}, inplace=True)
         l_sln_hourly.append(df)
@@ -426,11 +544,11 @@ def extract_duals(model, folder: str):
         else:
             aux_d[aux_name][pyo.value(k.index())] = v
 
-    df_duals = pd.DataFrame.from_dict(aux_d['eBalance'], orient='index').reset_index(drop=False)
-    df_duals.rename(columns={0: 'eBalance'}, inplace=True)
+    df_duals = pd.DataFrame.from_dict(aux_d['eBalance_bus_1'], orient='index').reset_index(drop=False)
+    df_duals.rename(columns={0: 'eBalance_bus_1'}, inplace=True)
 
     for k, v in aux_d.items():
-        if not k == 'eBalance':
+        if not 'eBalance' in k:
             df_aux = pd.DataFrame.from_dict(aux_d[k], orient='index').reset_index(drop=False).rename(columns={0: k})
             df_duals = pd.merge(left=df_duals, right=df_aux, left_on='index', right_on='index', how='left')
 
@@ -477,9 +595,49 @@ def generate_config(df_centroids: pd.DataFrame, folder: str):
 
 
 if __name__ == '__main__':
-    results_complete = run_complete_case(folder='data', case='complete_single_node.xlsx')
-    # df_complete, df_hourly = export_complete_solution(results_complete, '.')
-    df_duals = extract_duals(results_complete, 'complete_single_node')
-    # models = basis_execution(folder='data/aggregated_single')
-    # df_agg = export_aggregated_solution(models, 'aggregated_single')
-    # df_comparison = export_model_comparison(df_complete, df_agg)
+    results_complete = run_complete_case(folder='data', case='complete_network.xlsx', solver='gurobi')
+    df_duals = extract_duals(results_complete, 'complete_network_ext')
+    df_complete, df_hourly = export_complete_solution(results_complete, 'complete_network_ext')
+
+    # this is not the best way, but a quick and dirty one
+    df_cf = pd.read_excel(os.path.join('data', 'complete_network.xlsx'), sheet_name='cap_factors')
+    df_demand = pd.read_excel(os.path.join('data', 'complete_network.xlsx'), sheet_name='demand')
+    df_input = pd.merge(left=df_demand, left_on='period', right=df_cf, right_on='period')
+
+    i = 1
+    df_input_copy = df_input.copy()
+    df_input_copy['basis'] = ''
+    df_input_copy['weight'] = 0
+    basis_w = []
+    basis = df_duals.iloc[:, 1:].drop_duplicates().reset_index(drop=True)
+    df_duals_aux = df_duals.drop(columns='period')
+    for idx, r in basis.iterrows():
+        idx_basis = idx_match(r, df_duals_aux)
+        df_input_copy.loc[idx_basis, 'basis'] = i
+        df_input_copy.loc[idx_basis, 'weight'] = len(idx_basis)
+        i = i + 1
+
+
+    # Creating Centroids
+    df_basis_centroids = df_input_copy.groupby('basis').agg(
+        {'cap_factor': ['mean'], 'demand': ['mean'], 'weight': ['max']})
+    df_basis_centroids.reset_index(drop=False, inplace=True)  # to have the week as a data column and not as index
+    df_basis_centroids.columns = ['_'.join(col) for col in df_basis_centroids.columns]
+    df_basis_centroids = df_basis_centroids.rename(
+        columns={'cap_factor_mean': 'cap_factor', 'demand_mean': 'demand', 'weight_max': 'weight'}).drop(
+        columns=['basis_'])
+
+
+    # Generate configuration
+    df_config_ext = generate_config(df_basis_centroids, folder='aggregated_network_ext')
+    df_basis_centroids
+
+
+    # Basis execution
+    results = basis_execution(folder=os.path.join('data', 'aggregated_network_ext'),
+                                      # location of the aggregated model
+                                      solver='gurobi',
+                                      file='config_auto.xlsx')  # configuration file with aggregation information
+    df_agg_ext = export_aggregated_solution(results, 'aggregated_network_ext')
+    df_comparison_ext = export_model_comparison(df_complete, df_agg_ext)
+    df_comparison_ext
