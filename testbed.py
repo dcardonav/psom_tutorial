@@ -446,7 +446,7 @@ def extract_duals(model, folder: str):
 
 
 
-def generate_config(df_centroids: pd.DataFrame, folder: str):
+def generate_config(df_centroids: pd.DataFrame, folder: str, data_folder=True):
     """
     Code to export the centroids in df_centroids to the config_auto.xlsx, you can do it by hand to tweak it to your own clustering
     :param df_centroids:
@@ -454,8 +454,11 @@ def generate_config(df_centroids: pd.DataFrame, folder: str):
     :return:
     """
 
+    if data_folder:
+        prev_files = glob.glob(os.path.join('data',folder,'bs_auto*.xlsx'))
+    else:
+        prev_files = glob.glob(os.path.join(folder, 'bs_auto*.xlsx'))
 
-    prev_files = glob.glob(os.path.join('data',folder,'bs_auto*.xlsx'))
     for f in prev_files:
         os.remove(f)
 
@@ -469,7 +472,10 @@ def generate_config(df_centroids: pd.DataFrame, folder: str):
     df_config_auto = df_config_auto.iloc[:, [3, 1, 0, 2]]
     # exporting the file
 
-    df_config_auto.to_excel(os.path.join('data',folder, 'config_auto.xlsx'), index=False)
+    if data_folder:
+        df_config_auto.to_excel(os.path.join('data',folder, 'config_auto.xlsx'), index=False)
+    else:
+        df_config_auto.to_excel(os.path.join(folder, 'config_auto.xlsx'), index=False)
 
     return df_config_auto
 
